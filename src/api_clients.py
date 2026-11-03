@@ -150,6 +150,28 @@ _DESCRIBE_SCHEMA = {
     "required": ["name", "category", "fragile", "customs_relevant", "customs_note"],
 }
 
+_MERGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "category": {"type": "string"},
+                    "count": {"type": "integer"},
+                    "fragile": {"type": "boolean"},
+                    "customs_relevant": {"type": "boolean"},
+                    "customs_note": {"type": "string"},
+                },
+                "required": ["name", "category", "count", "fragile", "customs_relevant", "customs_note"],
+            },
+        },
+    },
+    "required": ["items"],
+}
+
 
 class MuseSparkClient:
     """Vision+Text-Modell: beschreibt Objekte und erstellt Packpläne.
@@ -216,6 +238,42 @@ class MuseSparkClient:
             json_schema=_DESCRIBE_SCHEMA,
         )
         return self._parse_json_content(content)
+
+    def merge_duplicate_detections(self, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Fasst rohe Einzelbild-Erkennungen zu einer Liste tatsächlich
+        unterschiedlicher physischer Gegenstände zusammen. Nötig, weil SAM
+        pro Einzelbild ohne Tracking läuft: dasselbe Möbelstück wird über
+        mehrere Frames hinweg mehrfach erkannt, oft mit leicht
+        unterschiedlicher Beschreibung (z.B. "Graues Sofa" vs. "Ecksofa
+        hellgrau"). Das ist die in der Aufgabenstellung vorgesehene
+        Fallback-Strategie bei fehlendem/instabilem SAM-Tracking."""
+        if not detections:
+            return []
+        if self.mock_mode:
+            return self._mock_merge(detections)
+
+        prompt = (
+            "Die folgenden Objekterkennungen stammen aus mehreren "
+            "Einzelbildern desselben Raums, aufgenommen beim Durchlaufen des "
+            "Raums mit dem Handy. Viele Erkennungen zeigen vermutlich "
+            "dasselbe physische Möbelstück aus verschiedenen Blickwinkeln "
+            "bzw. mit leicht unterschiedlicher Beschreibung. Fasse sie zu "
+            "einer Liste tatsächlich unterschiedlicher physischer "
+            "Gegenstände zusammen. 'count' = Anzahl der REALEN physischen "
+            "Objekte in diesem Raum (nicht Anzahl der Erkennungen). "
+            f"Erkennungen:\n{json.dumps(detections, ensure_ascii=False)}"
+        )
+        content = self._chat(
+            messages=[{"role": "user", "content": prompt}],
+            reasoning_effort="medium",
+            max_tokens=4000,
+            json_schema=_MERGE_SCHEMA,
+        )
+        parsed = self._parse_json_content(content)
+        items = parsed.get("items")
+        if not items:
+            return self._mock_merge(detections)
+        return items
 
     def generate_packing_plan(self, inventory_by_room: dict[str, list[dict]]) -> str:
         """Erstellt einen Packplan Raum für Raum als Text."""
@@ -284,6 +342,18 @@ class MuseSparkClient:
             "customs_relevant": False,
             "customs_note": "",
         }
+
+    @staticmethod
+    def _mock_merge(detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Naiver Fallback (Mock-Modus oder leere Modell-Antwort): exakte
+        # Übereinstimmung von Name+Kategorie zählt als dasselbe Objekt.
+        merged: dict[tuple[str, str], dict[str, Any]] = {}
+        for desc in detections:
+            key = (desc["name"], desc["category"])
+            if key not in merged:
+                merged[key] = {**desc, "count": 0}
+            merged[key]["count"] += 1
+        return list(merged.values())
 
     @staticmethod
     def _mock_packing_plan(inventory_by_room: dict[str, list[dict]]) -> str:

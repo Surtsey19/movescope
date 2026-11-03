@@ -63,13 +63,10 @@ def process_room_video(
                 desc = muse_client.describe_object(crop_path, term_hint=term)
                 descriptions.append(desc)
 
-    # Dedup über Name+Kategorie (siehe Modul-Docstring für die Begründung).
-    merged: dict[tuple[str, str], dict[str, Any]] = {}
-    for desc in descriptions:
-        key = (desc["name"], desc["category"])
-        if key not in merged:
-            merged[key] = {**desc, "count": 0}
-        merged[key]["count"] += 1
+    # Dedup über Muse Spark (siehe Modul-Docstring): dasselbe physische
+    # Objekt wird über mehrere Frames hinweg oft leicht unterschiedlich
+    # beschrieben, daher reicht ein reiner String-Vergleich nicht.
+    merged = muse_client.merge_duplicate_detections(descriptions)
 
     items = [
         InventoryItem(
@@ -81,6 +78,6 @@ def process_room_video(
             customs_relevant=data["customs_relevant"],
             customs_note=data.get("customs_note", ""),
         )
-        for data in merged.values()
+        for data in merged
     ]
     return items
