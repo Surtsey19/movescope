@@ -157,6 +157,7 @@ _DESCRIBE_SCHEMA = {
         "customs_note": {"type": "string"},
     },
     "required": ["name", "category", "fragile", "customs_relevant", "customs_note"],
+    "additionalProperties": False,
 }
 
 _MERGE_SCHEMA = {
@@ -175,10 +176,12 @@ _MERGE_SCHEMA = {
                     "customs_note": {"type": "string"},
                 },
                 "required": ["name", "category", "count", "fragile", "customs_relevant", "customs_note"],
+                "additionalProperties": False,
             },
         },
     },
     "required": ["items"],
+    "additionalProperties": False,
 }
 
 
