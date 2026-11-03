@@ -11,6 +11,7 @@ from dataclasses import dataclass
 CATEGORY_VOLUMES_M3: dict[str, float] = {
     "sofa 2-sitzer": 1.5,
     "sofa 3-sitzer": 2.0,
+    "ecksofa": 2.8,
     "sessel": 0.8,
     "esstisch": 1.0,
     "couchtisch": 0.5,
@@ -27,6 +28,8 @@ CATEGORY_VOLUMES_M3: dict[str, float] = {
     "waschmaschine": 1.0,
     "geschirrspüler": 1.0,
     "lampe": 0.1,
+    "stehlampe": 0.2,
+    "bettdecke": 0.15,
     "spiegel": 0.2,
     "teppich": 0.3,
     "karton": 0.1,

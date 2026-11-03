@@ -14,7 +14,13 @@ Objekt-Tracking über mehrere Frames (stabile object_id) ist bei
 Video-Uploads möglich, bei Einzelbild-Requests aber nicht gegeben. Die
 Dedup-Entscheidung aus der Aufgabenstellung ("wenn Tracking nicht stabil:
 nur Einzelbilder + Doppelungen per Muse Spark zusammenführen") ist hier
-bereits getroffen: Dedup passiert in pipeline.py über Name+Kategorie.
+bereits getroffen: Dedup passiert semantisch über
+MuseSparkClient.merge_duplicate_detections() (siehe dort).
+
+Die Kategorie wird per JSON-Schema-Enum auf die Schlüssel von
+volume.CATEGORY_VOLUMES_M3 festgelegt, damit die anschließende
+Volumenberechnung (deterministisch, siehe volume.py) immer einen gültigen
+Tabelleneintrag findet.
 """
 
 import base64
@@ -28,6 +34,9 @@ from openai import OpenAI
 from PIL import Image
 
 from . import config
+from .volume import CATEGORY_VOLUMES_M3
+
+_ALLOWED_CATEGORIES = list(CATEGORY_VOLUMES_M3.keys())
 
 # Generische Objektbegriffe für SAM-Anfragen. Muse Spark verfeinert daraus
 # später die genaue Kategorie (z.B. "sofa" -> "Sofa 3-Sitzer").
@@ -142,7 +151,7 @@ _DESCRIBE_SCHEMA = {
     "type": "object",
     "properties": {
         "name": {"type": "string"},
-        "category": {"type": "string"},
+        "category": {"type": "string", "enum": _ALLOWED_CATEGORIES},
         "fragile": {"type": "boolean"},
         "customs_relevant": {"type": "boolean"},
         "customs_note": {"type": "string"},
@@ -159,7 +168,7 @@ _MERGE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "category": {"type": "string"},
+                    "category": {"type": "string", "enum": _ALLOWED_CATEGORIES},
                     "count": {"type": "integer"},
                     "fragile": {"type": "boolean"},
                     "customs_relevant": {"type": "boolean"},
@@ -220,10 +229,12 @@ class MuseSparkClient:
         prompt = (
             "Beschreibe den Gegenstand im Bild für eine Umzugsinventarliste"
             f"{hint}. Antworte ausschließlich als JSON mit den Feldern: "
-            "name (deutsch, kurz), category (z.B. 'Sofa 3-Sitzer', "
-            "'Bücherregal'), fragile (bool), customs_relevant (bool, z.B. "
-            "true bei Alkohol/Tabak/Waffen), customs_note (kurzer Hinweis "
-            "oder leerer String)."
+            "name (deutsch, kurzer konkreter Name, z.B. 'Graues Ecksofa'), "
+            "category (MUSS GENAU einer dieser Werte sein: "
+            f"{', '.join(_ALLOWED_CATEGORIES)} - wähle den am besten "
+            "passenden, sonst 'sonstiges'), fragile (bool), "
+            "customs_relevant (bool, z.B. true bei Alkohol/Tabak/Waffen), "
+            "customs_note (kurzer Hinweis oder leerer String)."
         )
         content = self._chat(
             messages=[{
@@ -261,6 +272,9 @@ class MuseSparkClient:
             "einer Liste tatsächlich unterschiedlicher physischer "
             "Gegenstände zusammen. 'count' = Anzahl der REALEN physischen "
             "Objekte in diesem Raum (nicht Anzahl der Erkennungen). "
+            "category MUSS GENAU einer dieser Werte sein: "
+            f"{', '.join(_ALLOWED_CATEGORIES)} - wähle pro Gegenstand den "
+            "am besten passenden, sonst 'sonstiges'. "
             f"Erkennungen:\n{json.dumps(detections, ensure_ascii=False)}"
         )
         content = self._chat(
