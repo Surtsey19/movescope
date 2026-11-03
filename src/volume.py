@@ -32,6 +32,10 @@ CATEGORY_VOLUMES_M3: dict[str, float] = {
     "bettdecke": 0.15,
     "spiegel": 0.2,
     "teppich": 0.3,
+    "mikrowelle": 0.1,
+    "kaffeemaschine": 0.05,
+    "wasserkocher": 0.03,
+    "toaster": 0.05,
     "karton": 0.1,
     "sonstiges": 0.5,
 }

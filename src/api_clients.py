@@ -38,12 +38,21 @@ from .volume import CATEGORY_VOLUMES_M3
 
 _ALLOWED_CATEGORIES = list(CATEGORY_VOLUMES_M3.keys())
 
-# Generische Objektbegriffe für SAM-Anfragen. Muse Spark verfeinert daraus
-# später die genaue Kategorie (z.B. "sofa" -> "Sofa 3-Sitzer").
+# Generische Objektbegriffe für SAM-Anfragen - bewusst auf Englisch.
+# Live getestet (siehe Testmaterial in test_media/): SAM 3.1 reagiert auf
+# deutsche Begriffe unzuverlässig (z.B. "waschmaschine": 0 Treffer trotz
+# sichtbarer Waschmaschine im Bild, "tisch"/"stuhl"/"kühlschrank" ebenso
+# 0 Treffer), während die englischen Äquivalente ("washing machine",
+# "table", "chair", "fridge") zuverlässig treffen. Das deutsche
+# Wohnzimmer-Video hatte den Bug zunächst verdeckt, weil "sofa" und
+# "lampe" als Zufallstreffer fast identisch zum Englischen sind.
+# Muse Spark verfeinert aus dem SAM-Treffer später die genaue deutsche
+# Kategorie (z.B. "table" -> "Esstisch").
 BASE_OBJECT_TERMS: list[str] = [
-    "sofa", "sessel", "tisch", "stuhl", "bett", "kleiderschrank", "kommode",
-    "regal", "schreibtisch", "fernseher", "kühlschrank", "waschmaschine",
-    "geschirrspüler", "lampe", "spiegel", "teppich",
+    "sofa", "armchair", "table", "chair", "bed", "wardrobe", "dresser",
+    "shelf", "desk", "tv", "fridge", "washing machine", "dishwasher",
+    "lamp", "mirror", "rug", "microwave", "coffee machine", "kettle",
+    "toaster",
 ]
 
 _FRAME_RE = re.compile(r"^<(\d+)f>(.*)$")
