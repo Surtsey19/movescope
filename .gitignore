@@ -10,3 +10,5 @@ output/
 *.mov
 *.avi
 .DS_Store
+.claude/
+*.log
