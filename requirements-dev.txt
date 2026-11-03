@@ -1,2 +1,4 @@
 -r requirements.txt
 playwright>=1.47
+imageio>=2.34
+imageio-ffmpeg>=0.5
