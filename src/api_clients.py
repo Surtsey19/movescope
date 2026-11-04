@@ -1,26 +1,24 @@
-"""Clients für SAM 3.1 (Segmentierung) und Muse Spark (Vision/Text).
+"""Clients for SAM 3.1 (segmentation) and Muse Spark (vision/text).
 
-Beide APIs sind OpenAI-SDK-kompatibel (siehe Meta-Hackathon-Doku):
+Both APIs are OpenAI-SDK-compatible (per the Meta hackathon docs):
 - Meta Model API: base_url=https://api.meta.ai/v1 (SAM 3.1 + Muse Spark)
 - Baseten:         base_url=https://inference.baseten.co/v1 (Muse Spark Open)
 
-SAM 3.1 wird pro Einzelbild aufgerufen (nicht per Video-Upload), weil wir die
-Bildanzahl bereits in frame_extraction.py auf max. 15 Bilder/Raum begrenzen,
-um die API-Kosten im Griff zu behalten. Ein SAM-Request fragt nach genau
-einer Objektart (z.B. "sofa") - für mehrere Objektarten sind mehrere
-Requests nötig (siehe BASE_OBJECT_TERMS unten).
+SAM 3.1 is called per single image (not via video upload) because we
+already cap the image count in frame_extraction.py at max. 15 images/room
+to keep API costs under control. One SAM request asks about exactly one
+object type (e.g. "sofa") - multiple object types need multiple requests
+(see BASE_OBJECT_TERMS below).
 
-Objekt-Tracking über mehrere Frames (stabile object_id) ist bei
-Video-Uploads möglich, bei Einzelbild-Requests aber nicht gegeben. Die
-Dedup-Entscheidung aus der Aufgabenstellung ("wenn Tracking nicht stabil:
-nur Einzelbilder + Doppelungen per Muse Spark zusammenführen") ist hier
-bereits getroffen: Dedup passiert semantisch über
-MuseSparkClient.merge_duplicate_detections() (siehe dort).
+Object tracking across frames (a stable object_id) is possible with video
+uploads, but not with single-image requests. The dedup decision from the
+task brief ("if tracking isn't reliable: segment single images and merge
+duplicates via Muse Spark") is already made here: dedup happens
+semantically via MuseSparkClient.merge_duplicate_detections() (see there).
 
-Die Kategorie wird per JSON-Schema-Enum auf die Schlüssel von
-volume.CATEGORY_VOLUMES_M3 festgelegt, damit die anschließende
-Volumenberechnung (deterministisch, siehe volume.py) immer einen gültigen
-Tabelleneintrag findet.
+The category is constrained via a JSON-schema enum to the keys of
+volume.CATEGORY_VOLUMES_M3, so the downstream (deterministic, see
+volume.py) volume calculation always finds a valid table entry.
 """
 
 import base64
@@ -38,16 +36,15 @@ from .volume import CATEGORY_VOLUMES_M3
 
 _ALLOWED_CATEGORIES = list(CATEGORY_VOLUMES_M3.keys())
 
-# Generische Objektbegriffe für SAM-Anfragen - bewusst auf Englisch.
-# Live getestet (siehe Testmaterial in test_media/): SAM 3.1 reagiert auf
-# deutsche Begriffe unzuverlässig (z.B. "waschmaschine": 0 Treffer trotz
-# sichtbarer Waschmaschine im Bild, "tisch"/"stuhl"/"kühlschrank" ebenso
-# 0 Treffer), während die englischen Äquivalente ("washing machine",
-# "table", "chair", "fridge") zuverlässig treffen. Das deutsche
-# Wohnzimmer-Video hatte den Bug zunächst verdeckt, weil "sofa" und
-# "lampe" als Zufallstreffer fast identisch zum Englischen sind.
-# Muse Spark verfeinert aus dem SAM-Treffer später die genaue deutsche
-# Kategorie (z.B. "table" -> "Esstisch").
+# Generic object terms for SAM queries - deliberately in English.
+# Live-tested (see test footage in test_media/): SAM 3.1 responds to
+# German terms unreliably (e.g. "waschmaschine": 0 hits despite a visible
+# washing machine in the frame; "tisch"/"stuhl"/"kühlschrank" likewise
+# 0 hits), while the English equivalents ("washing machine", "table",
+# "chair", "fridge") hit reliably. The original living-room test video
+# had masked this bug because "sofa" and "lampe" happen to be near-
+# cognates of English. Muse Spark later refines the SAM hit into the
+# exact category (e.g. "table" -> "dining table").
 BASE_OBJECT_TERMS: list[str] = [
     "sofa", "armchair", "table", "chair", "bed", "wardrobe", "dresser",
     "shelf", "desk", "tv", "fridge", "washing machine", "dishwasher",
@@ -64,8 +61,8 @@ _ENTRY_ID_RE = re.compile(r"^(-?\d+)")
 
 
 class ApiNotConfiguredError(RuntimeError):
-    """Wird geworfen, wenn ein echter (nicht-Mock) Call versucht wird, aber
-    der API-Key fehlt."""
+    """Raised when a real (non-mock) call is attempted but the API key is
+    missing."""
 
 
 def _image_to_data_url(image_path: str) -> str:
@@ -77,10 +74,10 @@ def _image_to_data_url(image_path: str) -> str:
 
 
 def parse_sam_output(output_text: str) -> list[dict[str, Any]]:
-    """Parst die SAM-3.1-Spezialtoken-Ausgabe in eine Liste von
-    {frame, object_id, box=(x1,y1,x2,y2)}. Maskendaten werden ignoriert, da
-    wir nur die Bounding Box zum Croppen brauchen. Leerer Text (kein
-    Treffer) gibt eine leere Liste zurück."""
+    """Parses SAM 3.1's special-token output into a list of
+    {frame, object_id, box=(x1,y1,x2,y2)}. Mask data is ignored since we
+    only need the bounding box for cropping. Empty text (no hit) returns
+    an empty list."""
     results: list[dict[str, Any]] = []
     if not output_text or not output_text.strip():
         return results
@@ -107,8 +104,8 @@ def parse_sam_output(output_text: str) -> list[dict[str, Any]]:
 
 
 class SamClient:
-    """Lokalisiert Objekte einer gegebenen Art (z.B. "sofa") in einem
-    Einzelbild über SAM 3.1."""
+    """Locates objects of a given kind (e.g. "sofa") in a single image via
+    SAM 3.1."""
 
     def __init__(self, mock_mode: bool | None = None):
         self.mock_mode = config.MOCK_MODE if mock_mode is None else mock_mode
@@ -116,13 +113,13 @@ class SamClient:
         if not self.mock_mode:
             if not config.META_API_KEY:
                 raise ApiNotConfiguredError(
-                    "META_API_KEY fehlt. Entweder .env ergänzen oder MOCK_MODE=true setzen."
+                    "META_API_KEY is missing. Set it in .env or set MOCK_MODE=true."
                 )
             self._client = OpenAI(base_url=config.META_BASE_URL, api_key=config.META_API_KEY)
 
     def find_objects(self, image_path: str, term: str) -> list[dict[str, Any]]:
-        """Gibt eine Liste von {object_id, box=(x1,y1,x2,y2)} für Treffer
-        von `term` im Bild zurück (leer, wenn kein Treffer)."""
+        """Returns a list of {object_id, box=(x1,y1,x2,y2)} for hits of
+        `term` in the image (empty if no hit)."""
         if self.mock_mode:
             return self._mock_find(image_path, term)
 
@@ -147,8 +144,8 @@ class SamClient:
 
     @staticmethod
     def _mock_find(image_path: str, term: str) -> list[dict[str, Any]]:
-        # Platzhalter ohne echten API-Call: nur der erste Begriff pro Bild
-        # "findet" ein Objekt, das das ganze Bild abdeckt.
+        # Placeholder without a real API call: only the first term per
+        # image "finds" an object that covers the whole image.
         if term != BASE_OBJECT_TERMS[0]:
             return []
         with Image.open(image_path) as img:
@@ -195,8 +192,8 @@ _MERGE_SCHEMA = {
 
 
 class MuseSparkClient:
-    """Vision+Text-Modell: beschreibt Objekte und erstellt Packpläne.
-    Umschaltbar zwischen Meta API und Baseten über MUSE_SPARK_PROVIDER."""
+    """Vision+text model: describes objects and drafts packing plans.
+    Switchable between the Meta API and Baseten via MUSE_SPARK_PROVIDER."""
 
     def __init__(self, mock_mode: bool | None = None):
         self.mock_mode = config.MOCK_MODE if mock_mode is None else mock_mode
@@ -206,19 +203,19 @@ class MuseSparkClient:
         if not self.mock_mode:
             if self.provider == "meta":
                 if not config.META_API_KEY:
-                    raise ApiNotConfiguredError("META_API_KEY fehlt (oder MOCK_MODE=true setzen).")
+                    raise ApiNotConfiguredError("META_API_KEY is missing (or set MOCK_MODE=true).")
                 self._client = OpenAI(base_url=config.META_BASE_URL, api_key=config.META_API_KEY)
                 self._model = config.META_MUSE_SPARK_MODEL
             else:
                 if not config.BASETEN_API_KEY:
-                    raise ApiNotConfiguredError("BASETEN_API_KEY fehlt (oder MOCK_MODE=true setzen).")
+                    raise ApiNotConfiguredError("BASETEN_API_KEY is missing (or set MOCK_MODE=true).")
                 self._client = OpenAI(base_url=config.BASETEN_BASE_URL, api_key=config.BASETEN_API_KEY)
                 self._model = self._resolve_baseten_model()
 
     def _resolve_baseten_model(self) -> str:
-        """Prüft, welcher Modellname verfügbar ist: der aus dem
-        Hackathon-Leitfaden ("...-1026") oder der aus der Meta-Doku (ohne
-        Suffix)."""
+        """Checks which model name is actually available: the one from the
+        hackathon guide ("...-1026") or the one from the Meta docs (no
+        suffix)."""
         configured = config.BASETEN_MUSE_SPARK_MODEL
         try:
             available = {m.id for m in self._client.models.list().data}
@@ -232,21 +229,21 @@ class MuseSparkClient:
         return configured
 
     def describe_object(self, image_crop_path: str, term_hint: str = "") -> dict[str, Any]:
-        """Beschreibt einen Objekt-Ausschnitt: Name, Kategorie, zerbrechlich,
-        Zoll-relevant."""
+        """Describes one object crop: name, category, fragile, customs-
+        relevant."""
         if self.mock_mode:
             return self._mock_describe(image_crop_path, term_hint)
 
-        hint = f" (SAM-Erkennung deutet auf: {term_hint})" if term_hint else ""
+        hint = f" (SAM detection suggests: {term_hint})" if term_hint else ""
         prompt = (
-            "Beschreibe den Gegenstand im Bild für eine Umzugsinventarliste"
-            f"{hint}. Antworte ausschließlich als JSON mit den Feldern: "
-            "name (deutsch, kurzer konkreter Name, z.B. 'Graues Ecksofa'), "
-            "category (MUSS GENAU einer dieser Werte sein: "
-            f"{', '.join(_ALLOWED_CATEGORIES)} - wähle den am besten "
-            "passenden, sonst 'sonstiges'), fragile (bool), "
-            "customs_relevant (bool, z.B. true bei Alkohol/Tabak/Waffen), "
-            "customs_note (kurzer Hinweis oder leerer String)."
+            "Describe the object in the image for a moving inventory list"
+            f"{hint}. Respond ONLY as JSON with the fields: "
+            "name (short, concrete name, e.g. 'Gray corner sofa'), "
+            "category (MUST be exactly one of these values: "
+            f"{', '.join(_ALLOWED_CATEGORIES)} - pick the best match, "
+            "otherwise 'other'), fragile (bool), customs_relevant (bool, "
+            "e.g. true for alcohol/tobacco/weapons), customs_note (short "
+            "note or empty string)."
         )
         content = self._chat(
             messages=[{
@@ -263,31 +260,30 @@ class MuseSparkClient:
         return self._parse_json_content(content)
 
     def merge_duplicate_detections(self, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Fasst rohe Einzelbild-Erkennungen zu einer Liste tatsächlich
-        unterschiedlicher physischer Gegenstände zusammen. Nötig, weil SAM
-        pro Einzelbild ohne Tracking läuft: dasselbe Möbelstück wird über
-        mehrere Frames hinweg mehrfach erkannt, oft mit leicht
-        unterschiedlicher Beschreibung (z.B. "Graues Sofa" vs. "Ecksofa
-        hellgrau"). Das ist die in der Aufgabenstellung vorgesehene
-        Fallback-Strategie bei fehlendem/instabilem SAM-Tracking."""
+        """Merges raw single-image detections into a list of actually
+        distinct physical items. Needed because SAM runs per single image
+        without tracking: the same piece of furniture gets detected
+        repeatedly across frames, often with a slightly different
+        description (e.g. "Gray sofa" vs. "Light gray corner sofa"). This
+        is the fallback strategy the task brief anticipates when SAM
+        tracking isn't reliable/available."""
         if not detections:
             return []
         if self.mock_mode:
             return self._mock_merge(detections)
 
         prompt = (
-            "Die folgenden Objekterkennungen stammen aus mehreren "
-            "Einzelbildern desselben Raums, aufgenommen beim Durchlaufen des "
-            "Raums mit dem Handy. Viele Erkennungen zeigen vermutlich "
-            "dasselbe physische Möbelstück aus verschiedenen Blickwinkeln "
-            "bzw. mit leicht unterschiedlicher Beschreibung. Fasse sie zu "
-            "einer Liste tatsächlich unterschiedlicher physischer "
-            "Gegenstände zusammen. 'count' = Anzahl der REALEN physischen "
-            "Objekte in diesem Raum (nicht Anzahl der Erkennungen). "
-            "category MUSS GENAU einer dieser Werte sein: "
-            f"{', '.join(_ALLOWED_CATEGORIES)} - wähle pro Gegenstand den "
-            "am besten passenden, sonst 'sonstiges'. "
-            f"Erkennungen:\n{json.dumps(detections, ensure_ascii=False)}"
+            "The following object detections come from multiple single "
+            "frames of the same room, captured while walking through the "
+            "room with a phone. Many detections likely show the same "
+            "physical piece of furniture from different angles or with a "
+            "slightly different description. Merge them into a list of "
+            "actually distinct physical items. 'count' = the number of "
+            "REAL physical objects in this room (not the number of "
+            "detections). category MUST be exactly one of these values: "
+            f"{', '.join(_ALLOWED_CATEGORIES)} - pick the best match per "
+            "item, otherwise 'other'. "
+            f"Detections:\n{json.dumps(detections, ensure_ascii=False)}"
         )
         content = self._chat(
             messages=[{"role": "user", "content": prompt}],
@@ -302,14 +298,14 @@ class MuseSparkClient:
         return items
 
     def generate_packing_plan(self, inventory_by_room: dict[str, list[dict]]) -> str:
-        """Erstellt einen Packplan Raum für Raum als Text."""
+        """Drafts a room-by-room packing plan as text."""
         if self.mock_mode:
             return self._mock_packing_plan(inventory_by_room)
 
         prompt = (
-            "Erstelle einen kurzen, praktischen Packplan Raum für Raum für "
-            "einen Umzug von Deutschland in die Schweiz, basierend auf dieser "
-            f"Inventarliste (JSON): {json.dumps(inventory_by_room, ensure_ascii=False)}"
+            "Create a short, practical room-by-room packing plan for a "
+            "move from Germany to Switzerland, based on this inventory "
+            f"list (JSON): {json.dumps(inventory_by_room, ensure_ascii=False)}"
         )
         content = self._chat(
             messages=[{"role": "user", "content": prompt}],
@@ -350,8 +346,8 @@ class MuseSparkClient:
             return json.loads(text)
         except json.JSONDecodeError:
             return {
-                "name": "Unbekannter Gegenstand",
-                "category": "sonstiges",
+                "name": "Unknown item",
+                "category": "other",
                 "fragile": False,
                 "customs_relevant": False,
                 "customs_note": "",
@@ -360,7 +356,7 @@ class MuseSparkClient:
     @staticmethod
     def _mock_describe(image_crop_path: str, term_hint: str) -> dict[str, Any]:
         stem = Path(image_crop_path).stem
-        category = term_hint or "sonstiges"
+        category = term_hint or "other"
         return {
             "name": f"{category.capitalize()} ({stem})",
             "category": category,
@@ -371,8 +367,8 @@ class MuseSparkClient:
 
     @staticmethod
     def _mock_merge(detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        # Naiver Fallback (Mock-Modus oder leere Modell-Antwort): exakte
-        # Übereinstimmung von Name+Kategorie zählt als dasselbe Objekt.
+        # Naive fallback (mock mode or empty model response): exact
+        # name+category match counts as the same object.
         merged: dict[tuple[str, str], dict[str, Any]] = {}
         for desc in detections:
             key = (desc["name"], desc["category"])
@@ -383,9 +379,9 @@ class MuseSparkClient:
 
     @staticmethod
     def _mock_packing_plan(inventory_by_room: dict[str, list[dict]]) -> str:
-        lines = ["Packplan (Mock-Daten, noch keine echte API verbunden):"]
+        lines = ["Packing plan (mock data, no real API connected yet):"]
         for room, items in inventory_by_room.items():
             lines.append(f"\n{room}:")
             for item in items:
-                lines.append(f"  - {item.get('name', 'Gegenstand')} sorgfältig verpacken")
+                lines.append(f"  - pack {item.get('name', 'item')} carefully")
         return "\n".join(lines)

@@ -1,4 +1,4 @@
-"""Extrahiert Einzelbilder aus einem Raumvideo für die Objekterkennung."""
+"""Extracts single frames from a room video for object detection."""
 
 from pathlib import Path
 
@@ -6,16 +6,17 @@ import cv2
 
 
 def extract_frames(video_path: str, out_dir: str, target_fps: float = 1.0, max_frames: int = 15) -> list[str]:
-    """Extrahiert ca. `target_fps` Bilder pro Sekunde aus dem Video, maximal `max_frames` Bilder.
+    """Extracts approx. `target_fps` frames per second from the video, up
+    to `max_frames` frames.
 
-    Gibt die Pfade der gespeicherten JPG-Dateien zurück, in zeitlicher Reihenfolge.
+    Returns the paths of the saved JPG files, in chronological order.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise ValueError(f"Video konnte nicht geöffnet werden: {video_path}")
+        raise ValueError(f"Could not open video: {video_path}")
 
     video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     frame_interval = max(1, round(video_fps / target_fps))
@@ -40,6 +41,6 @@ def extract_frames(video_path: str, out_dir: str, target_fps: float = 1.0, max_f
     cap.release()
 
     if not saved_paths:
-        raise ValueError("Es konnten keine Bilder aus dem Video extrahiert werden.")
+        raise ValueError("No frames could be extracted from the video.")
 
     return saved_paths

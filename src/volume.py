@@ -1,53 +1,54 @@
-"""Deterministische Volumen-, Karton- und Transporterberechnung.
+"""Deterministic volume, box, and van-size calculation.
 
-Das Volumen wird NICHT vom Sprachmodell geschätzt, sondern über eine feste
-Tabelle mit Standardvolumen pro Kategorie (wie bei Umzugsfirmen üblich).
+Volume is NOT estimated by the language model - it comes from a fixed
+table of standard volumes per category (the same approach real moving
+companies use).
 """
 
 from dataclasses import dataclass
 
-# Standardvolumen in m³ pro Kategorie (grobe Richtwerte von Umzugsfirmen).
-# "sonstiges" ist der Fallback für unbekannte Kategorien.
+# Standard volumes in m3 per category (rough industry rules of thumb).
+# "other" is the fallback for unrecognized categories.
 CATEGORY_VOLUMES_M3: dict[str, float] = {
-    "sofa 2-sitzer": 1.5,
-    "sofa 3-sitzer": 2.0,
-    "ecksofa": 2.8,
-    "sessel": 0.8,
-    "esstisch": 1.0,
-    "couchtisch": 0.5,
-    "stuhl": 0.2,
-    "bett doppelbett": 2.0,
-    "bett einzelbett": 1.0,
-    "kleiderschrank": 2.5,
-    "kommode": 0.8,
-    "bücherregal": 1.2,
-    "regal": 1.0,
-    "schreibtisch": 1.0,
-    "fernseher": 0.3,
-    "kühlschrank": 1.2,
-    "waschmaschine": 1.0,
-    "geschirrspüler": 1.0,
-    "lampe": 0.1,
-    "stehlampe": 0.2,
-    "bettdecke": 0.15,
-    "spiegel": 0.2,
-    "teppich": 0.3,
-    "mikrowelle": 0.1,
-    "kaffeemaschine": 0.05,
-    "wasserkocher": 0.03,
+    "sofa 2-seater": 1.5,
+    "sofa 3-seater": 2.0,
+    "corner sofa": 2.8,
+    "armchair": 0.8,
+    "dining table": 1.0,
+    "coffee table": 0.5,
+    "chair": 0.2,
+    "double bed": 2.0,
+    "single bed": 1.0,
+    "wardrobe": 2.5,
+    "dresser": 0.8,
+    "bookshelf": 1.2,
+    "shelf": 1.0,
+    "desk": 1.0,
+    "tv": 0.3,
+    "fridge": 1.2,
+    "washing machine": 1.0,
+    "dishwasher": 1.0,
+    "lamp": 0.1,
+    "floor lamp": 0.2,
+    "blanket": 0.15,
+    "mirror": 0.2,
+    "rug": 0.3,
+    "microwave": 0.1,
+    "coffee machine": 0.05,
+    "kettle": 0.03,
     "toaster": 0.05,
-    "karton": 0.1,
-    "sonstiges": 0.5,
+    "box": 0.1,
+    "other": 0.5,
 }
 
-BOX_VOLUME_M3 = 0.1  # Standard-Umzugskarton (ca. 60x40x40 cm)
+BOX_VOLUME_M3 = 0.1  # standard moving box (approx. 60x40x40 cm)
 
-# Transportergrößen nach Gesamtvolumen (grenzwerte in m³, inkl. Lademaß-Puffer).
+# Van/truck size by total volume (thresholds in m3, with loading-space buffer).
 TRANSPORT_SIZES: list[tuple[float, str]] = [
-    (8.0, "PKW-Anhänger / kleiner Transporter (z.B. VW Caddy)"),
-    (20.0, "Transporter mittel (z.B. Mercedes Sprinter / Ford Transit, lang)"),
-    (35.0, "LKW 7,5t"),
-    (float("inf"), "LKW 7,5t+ oder mehrere Fahrten nötig"),
+    (8.0, "Car trailer / small van (e.g. VW Caddy)"),
+    (20.0, "Medium van (e.g. Mercedes Sprinter / Ford Transit, long)"),
+    (35.0, "7.5t truck"),
+    (float("inf"), "7.5t+ truck or multiple trips needed"),
 ]
 
 
@@ -67,7 +68,7 @@ class InventoryItem:
 
     @property
     def unit_volume_m3(self) -> float:
-        return CATEGORY_VOLUMES_M3.get(self.category_key, CATEGORY_VOLUMES_M3["sonstiges"])
+        return CATEGORY_VOLUMES_M3.get(self.category_key, CATEGORY_VOLUMES_M3["other"])
 
     @property
     def total_volume_m3(self) -> float:
@@ -79,10 +80,10 @@ def compute_total_volume(items: list[InventoryItem]) -> float:
 
 
 def compute_box_count(items: list[InventoryItem]) -> int:
-    """Grobe Kartonschätzung: kleine/lose Gegenstände (Kategorie 'karton',
-    'sonstiges', 'lampe', 'spiegel', 'teppich') werden zu Standardkartons
-    zusammengefasst; alle anderen sind eigenständige Stücke."""
-    small_categories = {"karton", "sonstiges", "lampe", "spiegel", "teppich"}
+    """Rough box estimate: small/loose items (category 'box', 'other',
+    'lamp', 'mirror', 'rug') are bundled into standard moving boxes; all
+    other categories are counted as standalone pieces."""
+    small_categories = {"box", "other", "lamp", "mirror", "rug"}
     small_volume = sum(
         item.total_volume_m3 for item in items if item.category_key in small_categories
     )

@@ -1,12 +1,11 @@
-"""Verbindet Frame-Extraktion, SAM-3.1-Lokalisierung, Muse-Spark-Beschreibung
-und Volumenberechnung zu einer Pipeline pro Raum.
+"""Connects frame extraction, SAM 3.1 localization, Muse Spark description,
+and volume calculation into a per-room pipeline.
 
-SAM 3.1 wird pro Einzelbild und pro Objektbegriff (BASE_OBJECT_TERMS)
-aufgerufen (kein Video-Upload, um die Bildanzahl/Kosten über
-frame_extraction.py kontrolliert zu halten). Da dadurch keine stabile
-Objekt-ID über mehrere Frames existiert, werden Doppelungen über Name+
-Kategorie zusammengeführt - das ist die in der Aufgabenstellung vorgesehene
-Fallback-Strategie, falls Tracking nicht zuverlässig möglich ist.
+SAM 3.1 is called per single image and per object term (BASE_OBJECT_TERMS)
+(no video upload, to keep the image count/cost controlled via
+frame_extraction.py). Since this means there's no stable object ID across
+frames, duplicates are merged via name+category - the fallback strategy
+the task brief anticipates when reliable tracking isn't available.
 """
 
 from pathlib import Path
@@ -40,8 +39,8 @@ def process_room_video(
     muse_client: MuseSparkClient | None = None,
     object_terms: list[str] | None = None,
 ) -> list[InventoryItem]:
-    """Verarbeitet das Video eines Raums und gibt die zusammengeführte
-    Inventarliste für diesen Raum zurück."""
+    """Processes one room's video and returns the merged inventory list
+    for that room."""
     sam_client = sam_client or SamClient()
     muse_client = muse_client or MuseSparkClient()
     object_terms = object_terms or BASE_OBJECT_TERMS
@@ -63,9 +62,9 @@ def process_room_video(
                 desc = muse_client.describe_object(crop_path, term_hint=term)
                 descriptions.append(desc)
 
-    # Dedup über Muse Spark (siehe Modul-Docstring): dasselbe physische
-    # Objekt wird über mehrere Frames hinweg oft leicht unterschiedlich
-    # beschrieben, daher reicht ein reiner String-Vergleich nicht.
+    # Dedup via Muse Spark (see module docstring): the same physical
+    # object is often described slightly differently across frames, so a
+    # plain string comparison isn't enough.
     merged = muse_client.merge_duplicate_detections(descriptions)
 
     items = [

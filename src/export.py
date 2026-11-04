@@ -1,4 +1,4 @@
-"""Export der Ergebnisse: Inventartabelle (CSV) und Zoll-Inventarliste (PDF)."""
+"""Exports the results: inventory table (CSV) and customs inventory list (PDF)."""
 
 import csv
 from dataclasses import dataclass
@@ -24,9 +24,9 @@ _CELL_STYLE.leading = 11
 
 
 def _cell(text: str) -> Paragraph:
-    """Zellinhalt als Paragraph statt reinem String, damit lange Texte
-    (z.B. Gegenstandsnamen) innerhalb der festen Spaltenbreite umbrechen
-    statt über die Spalte hinauszulaufen."""
+    """Cell content as a Paragraph instead of a plain string, so long text
+    (e.g. item names) wraps within the fixed column width instead of
+    running past the column."""
     return Paragraph(text, _CELL_STYLE)
 
 
@@ -38,11 +38,11 @@ class MoveDetails:
 
 
 def export_inventory_csv(items: list[InventoryItem], out_path: str) -> str:
-    """Schreibt die Inventartabelle (Raum, Gegenstand, Anzahl, Volumen, zerbrechlich)."""
+    """Writes the inventory table (room, item, count, volume, fragile)."""
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["Raum", "Gegenstand", "Kategorie", "Anzahl", "Volumen (m3)", "Zerbrechlich", "Zollrelevant", "Zoll-Hinweis"])
+        writer.writerow(["Room", "Item", "Category", "Count", "Volume (m3)", "Fragile", "Customs relevant", "Customs note"])
         for item in items:
             writer.writerow([
                 item.room,
@@ -50,15 +50,15 @@ def export_inventory_csv(items: list[InventoryItem], out_path: str) -> str:
                 item.category,
                 item.count,
                 item.total_volume_m3,
-                "Ja" if item.fragile else "Nein",
-                "Ja" if item.customs_relevant else "Nein",
+                "Yes" if item.fragile else "No",
+                "Yes" if item.customs_relevant else "No",
                 item.customs_note,
             ])
     return out_path
 
 
 def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: str) -> str:
-    """Erstellt die Zoll-Inventarliste als PDF für den Umzug Deutschland -> Schweiz."""
+    """Creates the customs inventory list as a PDF for a move from Germany to Switzerland."""
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(
@@ -66,16 +66,17 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
     )
     story = []
 
-    story.append(Paragraph("Umzugsgut-Inventarliste für die Schweizer Zollanmeldung", styles["Title"]))
+    story.append(Paragraph("Household Goods Inventory for Swiss Customs Declaration", styles["Title"]))
     story.append(Spacer(1, 8 * mm))
 
     story.append(Paragraph(f"<b>Name:</b> {move.full_name}", styles["Normal"]))
-    story.append(Paragraph(f"<b>Bisherige Adresse:</b> {move.old_address}", styles["Normal"]))
-    story.append(Paragraph(f"<b>Neue Adresse (Schweiz):</b> {move.new_address}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Previous address:</b> {move.old_address}", styles["Normal"]))
+    story.append(Paragraph(f"<b>New address (Switzerland):</b> {move.new_address}", styles["Normal"]))
     story.append(Spacer(1, 6 * mm))
     story.append(Paragraph(
-        "<i>Hinweis: Zusätzlich zu dieser Liste muss das offizielle Formular "
-        "18.44 (Anmeldung für Übersiedlungsgut) ausgefüllt werden.</i>",
+        "<i>Note: In addition to this list, the official Form 18.44 "
+        "(declaration for household goods/relocation effects) must also be "
+        "completed.</i>",
         styles["Normal"],
     ))
     story.append(Spacer(1, 8 * mm))
@@ -84,7 +85,7 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
     for room in rooms:
         story.append(Paragraph(room, styles["Heading2"]))
         room_items = [i for i in items if i.room == room]
-        table_data = [["Gegenstand", "Kategorie", "Anzahl", "Volumen (m3)"]]
+        table_data = [["Item", "Category", "Count", "Volume (m3)"]]
         for item in room_items:
             table_data.append([_cell(item.name), _cell(item.category), str(item.count), f"{item.total_volume_m3:.2f}"])
         table = Table(table_data, colWidths=[70 * mm, 45 * mm, 20 * mm, 30 * mm])
@@ -97,9 +98,9 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
         story.append(Spacer(1, 6 * mm))
 
     customs_items = [i for i in items if i.customs_relevant]
-    story.append(Paragraph("Zu verzollende Waren", styles["Heading2"]))
+    story.append(Paragraph("Goods to Declare", styles["Heading2"]))
     if customs_items:
-        table_data = [["Gegenstand", "Raum", "Anzahl", "Hinweis"]]
+        table_data = [["Item", "Room", "Count", "Note"]]
         for item in customs_items:
             table_data.append([_cell(item.name), item.room, str(item.count), _cell(item.customs_note or "-")])
         table = Table(table_data, colWidths=[55 * mm, 30 * mm, 20 * mm, 60 * mm])
@@ -110,16 +111,16 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
         ]))
         story.append(table)
     else:
-        story.append(Paragraph("Keine zu verzollenden Waren identifiziert.", styles["Normal"]))
+        story.append(Paragraph("No goods to declare identified.", styles["Normal"]))
 
     story.append(Spacer(1, 8 * mm))
     total_volume = compute_total_volume(items)
     box_count = compute_box_count(items)
     transport = recommend_transport(total_volume)
     story.append(Paragraph(
-        f"<b>Gesamtvolumen:</b> {total_volume:.2f} m3 &nbsp;&nbsp; "
-        f"<b>Geschätzte Kartons:</b> {box_count} &nbsp;&nbsp; "
-        f"<b>Empfohlener Transporter:</b> {transport}",
+        f"<b>Total volume:</b> {total_volume:.2f} m3 &nbsp;&nbsp; "
+        f"<b>Estimated boxes:</b> {box_count} &nbsp;&nbsp; "
+        f"<b>Recommended vehicle:</b> {transport}",
         styles["Normal"],
     ))
 

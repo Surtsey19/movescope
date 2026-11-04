@@ -1,19 +1,20 @@
 # MoveScope
 
-Aus einem Handyvideo eines Raums wird eine fertige Umzugsplanung inklusive
-Inventarliste für den Schweizer Zoll (Umzug von Deutschland in die Schweiz).
+Turns a phone video of a room into a complete relocation plan, including
+an inventory list for Swiss customs (move from Germany to Switzerland).
 
-Projekt für den Meta Global AI Developer Hackathon (Indie Track).
+Project for the Meta Global AI Developer Hackathon (Indie Track).
 
 ## Pipeline
 
-1. Video einlesen, ca. 1 Bild/Sekunde extrahieren (max. 15 Bilder pro Raum)
-2. SAM 3.1: Möbel/Gegenstände segmentieren und über die Bilder verfolgen
-3. Muse Spark (Vision): pro Objekt Name, Kategorie, zerbrechlich, Zoll-Hinweis
-4. Volumen deterministisch aus Kategorie-Tabelle in Python berechnen
-5. Muse Spark: Packplan Raum für Raum
-6. Export: Inventartabelle, Zusammenfassung, Packplan, Zoll-Inventarliste (PDF + CSV)
-7. Streamlit-UI: Video hochladen → Fortschritt → Ergebnisse mit Downloads
+1. Read the video, extract ~1 frame/second (max. 15 frames per room)
+2. SAM 3.1: locate furniture/objects per frame (Meta Model API)
+3. Muse Spark (vision): per object, derive name, category, fragile, customs note
+4. Muse Spark merges duplicate detections across frames into real physical objects
+5. Volume computed deterministically from a Python category table (not estimated by the LLM)
+6. Muse Spark: room-by-room packing plan
+7. Export: inventory table, summary, packing plan, customs inventory list (PDF + CSV)
+8. Streamlit UI: upload video → progress → results with downloads
 
 ## Setup
 
@@ -22,21 +23,26 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-# .env mit den eigenen API-Keys befüllen
+# fill in your own API keys in .env
 ```
 
-## Starten
+## Run
 
 ```powershell
 streamlit run src/app.py
 ```
 
-## Modellwahl
+## Model choice
 
-Per `.env`-Einstellung `MUSE_SPARK_PROVIDER` umschaltbar zwischen:
+Switchable via the `.env` setting `MUSE_SPARK_PROVIDER`:
 - `meta` – Meta Model API (SAM 3.1, Muse Spark)
-- `baseten` – Muse Spark Open über Baseten (Standard, Bonuspreis Open-Weights)
+- `baseten` – Muse Spark Open via Baseten (default, open-weights bonus prize)
 
-## Status
+## Dev tooling
 
-Projekt im Aufbau (Hackathon-Deadline: 05.11., 03:00 Uhr).
+- `scripts/minimal_api_test.py` – quick sanity check against the real APIs
+- `scripts/browser_test.py` – Playwright smoke test of the Streamlit UI
+- `tools/generate_test_media.py` – generates synthetic room photos/videos via Muse Image
+- `tools/record_demo.py` / `tools/build_demo_video.py` – records and assembles the demo video
+
+Install dev dependencies with `pip install -r requirements-dev.txt`.
