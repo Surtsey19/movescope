@@ -1,9 +1,8 @@
-"""Baut aus der Playwright-Rohaufnahme (tools/record_demo.py) das fertige
-Demo-Video: Titelkarten + geschnittene/zeitraffer-beschleunigte Segmente
-der echten App-Nutzung, mit eingebrannten deutschen Untertiteln statt
-Sprachausgabe (siehe data/video_script.md für den Plan).
+"""Builds the final demo video from the Playwright raw recording
+(tools/record_demo.py): title cards + cut/time-lapsed segments of real app
+usage, with burned-in English captions instead of a voiceover.
 
-Nutzt ffmpeg direkt (über imageio-ffmpeg, kein System-ffmpeg nötig).
+Uses ffmpeg directly (via imageio-ffmpeg, no system ffmpeg needed).
 """
 
 import json
@@ -67,10 +66,10 @@ def clip_segment(
     raw_video: Path, start: float, end: float, speed: float, caption: str, out_path: Path,
     freeze_hold: float = 0.0,
 ) -> None:
-    """Schneidet [start,end] aus der Rohaufnahme, beschleunigt/verlangsamt um
-    `speed` (1.0 = normal, >1 = schneller), skaliert auf WxH, brennt die
-    Caption ein. `freeze_hold`: hängt am Ende ein Standbild des letzten
-    Frames für N Sekunden an (zum Lesen der Caption)."""
+    """Cuts [start,end] out of the raw recording, speeds up/slows down by
+    `speed` (1.0 = normal, >1 = faster), scales to WxH, burns in the
+    caption. `freeze_hold`: appends a freeze-frame of the last frame for
+    N seconds at the end (to give time to read the caption)."""
     vf_parts = [f"scale={W}:{H}:force_original_aspect_ratio=decrease", f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2"]
     if speed != 1.0:
         vf_parts.append(f"setpts=PTS/{speed}")
@@ -89,7 +88,7 @@ def clip_segment(
 
 
 def image_hold(image_path: Path, duration: float, caption: str, out_path: Path) -> None:
-    """Zeigt ein Standbild (z.B. gerendertes PDF) für `duration` Sekunden."""
+    """Shows a still image (e.g. a rendered PDF page) for `duration` seconds."""
     vf = f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=white"
     if caption:
         vf += "," + caption_filter(caption)
@@ -150,79 +149,79 @@ def main() -> None:
         segments.append(p)
 
     # 1) Intro
-    add_title("MoveScope", "vom Handyvideo zur fertigen Umzugsplanung", 5.0)
-    add_title("Umzug Deutschland → Schweiz", "Inventarliste, Volumen und Zoll-Dokument – vollautomatisch", 6.0)
+    add_title("MoveScope", "from a phone video to a complete relocation plan", 5.0)
+    add_title("Germany → Switzerland move", "Inventory list, volume, and customs document – fully automated", 6.0)
     add_title(
-        "Die Pipeline",
-        "Video → 15 Bilder/Raum → SAM 3.1 Segmentierung → Muse Spark Vision-Labeling → deterministische Volumenberechnung",
+        "The pipeline",
+        "Video → 15 frames/room → SAM 3.1 segmentation → Muse Spark vision labeling → deterministic volume calculation",
         8.0,
     )
 
-    # 2) Setup: Adressdaten + Raum/Video hinzufügen
+    # 2) Setup: fill in address + add room/video
     add_clip(
         max(0.0, m["page_loaded"]), m["video_uploaded"], 1.0,
-        "1. Umzugsdaten eintragen, pro Raum ein kurzes Handyvideo hochladen",
+        "1. Enter move details, upload a short phone video per room",
         freeze_hold=8.0,
     )
 
-    # 3) Analyse (reale Wartezeit stark beschleunigt, in zwei Phasen erzählt)
+    # 3) Analysis (real wait time heavily sped up, narrated in two phases)
     mid = (m["analyze_clicked"] + m["results_visible"]) / 2
     add_clip(
         m["analyze_clicked"], mid, 22.0,
-        "2. SAM 3.1 segmentiert jedes Objekt im Video – zentral über die Meta Model API",
+        "2. SAM 3.1 locates every object in the video – via the Meta Model API",
     )
     add_clip(
         mid, m["results_visible"], 22.0,
-        "Muse Spark benennt jeden Gegenstand auf Deutsch",
+        "Muse Spark names and classifies each item",
     )
 
-    # 4) Ergebnisse
+    # 4) Results
     add_clip(
         m["results_visible"], m["metrics_scrolled"], 0.22,
-        "3. Fertige Inventarliste – jedes Objekt einzeln erkannt",
+        "3. Finished inventory list – every object detected individually",
     )
     add_clip(
         m["metrics_scrolled"], m["packing_plan_scrolled"], 0.13,
-        "Volumen wird deterministisch berechnet – nicht vom Sprachmodell geschätzt",
+        "Volume is computed deterministically – never estimated by the language model",
     )
     add_clip(
         m["packing_plan_scrolled"], m["pdf_downloaded"], 0.18,
-        "Muse Spark erstellt einen Packplan, Export als CSV und Zoll-PDF",
+        "Muse Spark drafts a packing plan, export as CSV and customs PDF",
     )
 
-    # 5) Echtes Zoll-PDF zeigen (per PyMuPDF gerendert statt Browser-Navigation,
-    # da Chromium lokale PDFs im Headless-Modus als Download statt Inline-
-    # Ansicht behandelt - siehe record_demo.py)
+    # 5) Show the real customs PDF (rendered via PyMuPDF instead of browser
+    # navigation, since Chromium treats local PDFs as a download instead of
+    # an inline view in headless mode - see record_demo.py)
     pdf_pages = sorted(RAW_DIR.glob("pdf_page_*.png"))
     for i, pg in enumerate(pdf_pages):
         caption = (
-            "Offizielle Zoll-Inventarliste für die Schweiz"
+            "Official Swiss customs inventory list"
             if i == 0 else
-            "Hinweis auf Formular 18.44 im Dokument"
+            "Reference to the real Form 18.44 in the document"
         )
         add_image(pg, 12.0, caption)
 
-    # 6) Technik-Highlights + Outro
+    # 6) Technical highlights + outro
     add_title(
-        "Zwei echte Bugs unterwegs gefunden",
-        "Doppelzählung über Frames durch LLM-Merge gefixt, Kategorie-Enum erzwingt gültige Volumen-Zuordnung",
+        "Two real bugs found along the way",
+        "Cross-frame duplicate counting fixed via an LLM merge step; a category enum now enforces valid volume mapping",
         8.0,
     )
     add_title(
-        "Technische Herausforderung",
-        "SAM 3.1 braucht englische Suchbegriffe – „waschmaschine“ fand nichts, „washing machine“ zuverlässig",
+        "Technical challenge",
+        "SAM 3.1 needs English query terms – German terms like \"waschmaschine\" returned 0 hits, \"washing machine\" hit reliably",
         8.0,
     )
     add_title(
         "Baseten Muse Spark Open",
-        "Open-Weights-Modell als Standard-Backend, umschaltbar auf die Meta Model API",
+        "Open-weights model as the default backend, switchable to the Meta Model API",
         6.0,
     )
     add_title("github.com/Surtsey19/movescope", "", 6.0)
 
     concat(segments, OUT_PATH)
     duration = probe_duration(OUT_PATH)
-    print(f"\nFertig: {OUT_PATH} ({duration:.1f}s, {len(segments)} Segmente)")
+    print(f"\nDone: {OUT_PATH} ({duration:.1f}s, {len(segments)} segments)")
 
 
 if __name__ == "__main__":

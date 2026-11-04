@@ -1,11 +1,11 @@
-"""Nimmt einen echten App-Durchlauf (Küchenvideo, reichhaltigstes Ergebnis)
-mit Playwright als Bildschirmvideo auf und loggt Zeitstempel für jeden
-Meilenstein. Die Rohaufnahme + das Timestamp-JSON werden danach von
-tools/build_demo_video.py zu einem geschnittenen 3-Minuten-Demo
-zusammengebaut (Zeitraffer für die Wartezeit, Untertitel-Overlays).
+"""Records a real app walkthrough (kitchen video, richest result set) as a
+screen video via Playwright and logs a timestamp for each milestone. The
+raw recording + the timestamp JSON are then assembled by
+tools/build_demo_video.py into a cut ~3-minute demo (time-lapse for the
+wait, caption overlays).
 
-Kein Ton nötig - das fertige Video bekommt eingebrannte Untertitel statt
-Sprachausgabe.
+No audio needed - the final video gets burned-in captions instead of a
+voiceover.
 """
 
 import json
@@ -64,26 +64,26 @@ def _run_flow(page, t0: float) -> None:
 
         page.fill('input[aria-label="Name"]', "Max Mustermann")
         page.keyboard.press("Tab")
-        page.fill('input[aria-label="Bisherige Adresse (Deutschland)"]', "Musterstr 1, 10115 Berlin, DE")
+        page.fill('input[aria-label="Previous address (Germany)"]', "Musterstr 1, 10115 Berlin, DE")
         page.keyboard.press("Tab")
-        page.fill('input[aria-label="Neue Adresse (Schweiz)"]', "Beispielweg 2, 8001 Zuerich, CH")
+        page.fill('input[aria-label="New address (Switzerland)"]', "Beispielweg 2, 8001 Zurich, CH")
         page.keyboard.press("Tab")
         page.wait_for_timeout(500)
         mark("address_filled", t0)
 
-        page.fill('input[aria-label="Raumname"]', "Kueche")
+        page.fill('input[aria-label="Room name"]', "Kitchen")
         page.keyboard.press("Enter")
         page.set_input_files('input[type="file"]', VIDEO_PATH)
         page.wait_for_timeout(1500)
         mark("video_uploaded", t0)
 
-        add_button = page.get_by_role("button", name="Raum hinzufügen")
+        add_button = page.get_by_role("button", name="Add room")
         add_button.wait_for(state="visible", timeout=10000)
         add_button.click()
-        page.wait_for_selector("text=Raum 'Kueche' hinzugefügt", timeout=10000)
+        page.wait_for_selector("text=Room 'Kitchen' added", timeout=10000)
         mark("room_added", t0)
 
-        analyze_button = page.get_by_role("button", name="🚀 Räume analysieren")
+        analyze_button = page.get_by_role("button", name="🚀 Analyze rooms")
         analyze_button.click()
         mark("analyze_clicked", t0)
 
@@ -108,23 +108,23 @@ def _run_flow(page, t0: float) -> None:
         mark("downloads_scrolled", t0)
 
         with page.expect_download() as csv_dl:
-            page.get_by_role("button", name="📄 Inventarliste (CSV)").click()
-        csv_path = RAW_DIR / "inventarliste.csv"
+            page.get_by_role("button", name="📄 Inventory list (CSV)").click()
+        csv_path = RAW_DIR / "inventory.csv"
         csv_dl.value.save_as(str(csv_path))
         page.wait_for_timeout(1000)
         mark("csv_downloaded", t0)
 
         with page.expect_download() as pdf_dl:
-            page.get_by_role("button", name="📑 Zoll-Inventarliste (PDF)").click()
-        pdf_path = RAW_DIR / "zoll_inventarliste.pdf"
+            page.get_by_role("button", name="📑 Customs inventory list (PDF)").click()
+        pdf_path = RAW_DIR / "customs_inventory.pdf"
         pdf_dl.value.save_as(str(pdf_path))
         page.wait_for_timeout(1000)
         mark("pdf_downloaded", t0)
 
-        # Kein page.goto() auf die PDF-Datei: Chromium behandelt lokale
-        # PDF-Dateien im automatisierten Modus als Download statt als
-        # Inline-Ansicht ("Download is starting"-Fehler). Das PDF wird
-        # stattdessen separat per PyMuPDF gerendert (siehe build_demo_video.py).
+        # No page.goto() on the PDF file: Chromium treats local PDF
+        # navigation as a download instead of an inline view in headless
+        # mode ("Download is starting" error). The PDF is instead rendered
+        # separately via PyMuPDF (see build_demo_video.py).
         mark("end", t0)
 
 
