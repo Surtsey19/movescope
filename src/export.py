@@ -18,6 +18,17 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 from .volume import InventoryItem, compute_box_count, compute_total_volume, recommend_transport
 
+_CELL_STYLE = getSampleStyleSheet()["Normal"].clone("cell")
+_CELL_STYLE.fontSize = 9
+_CELL_STYLE.leading = 11
+
+
+def _cell(text: str) -> Paragraph:
+    """Zellinhalt als Paragraph statt reinem String, damit lange Texte
+    (z.B. Gegenstandsnamen) innerhalb der festen Spaltenbreite umbrechen
+    statt über die Spalte hinauszulaufen."""
+    return Paragraph(text, _CELL_STYLE)
+
 
 @dataclass
 class MoveDetails:
@@ -50,7 +61,9 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
     """Erstellt die Zoll-Inventarliste als PDF für den Umzug Deutschland -> Schweiz."""
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate(out_path, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
+    doc = SimpleDocTemplate(
+        out_path, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm, leftMargin=15 * mm, rightMargin=15 * mm
+    )
     story = []
 
     story.append(Paragraph("Umzugsgut-Inventarliste für die Schweizer Zollanmeldung", styles["Title"]))
@@ -73,8 +86,8 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
         room_items = [i for i in items if i.room == room]
         table_data = [["Gegenstand", "Kategorie", "Anzahl", "Volumen (m3)"]]
         for item in room_items:
-            table_data.append([item.name, item.category, str(item.count), f"{item.total_volume_m3:.2f}"])
-        table = Table(table_data, colWidths=[60 * mm, 45 * mm, 20 * mm, 30 * mm])
+            table_data.append([_cell(item.name), _cell(item.category), str(item.count), f"{item.total_volume_m3:.2f}"])
+        table = Table(table_data, colWidths=[70 * mm, 45 * mm, 20 * mm, 30 * mm])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -88,8 +101,8 @@ def export_customs_pdf(items: list[InventoryItem], move: MoveDetails, out_path: 
     if customs_items:
         table_data = [["Gegenstand", "Raum", "Anzahl", "Hinweis"]]
         for item in customs_items:
-            table_data.append([item.name, item.room, str(item.count), item.customs_note or "-"])
-        table = Table(table_data, colWidths=[50 * mm, 35 * mm, 20 * mm, 50 * mm])
+            table_data.append([_cell(item.name), item.room, str(item.count), _cell(item.customs_note or "-")])
+        table = Table(table_data, colWidths=[55 * mm, 30 * mm, 20 * mm, 60 * mm])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
